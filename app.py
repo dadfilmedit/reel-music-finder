@@ -62,51 +62,90 @@ with tab1:
         if not url.strip():
              st.warning("Please enter an Instagram Reel URL.")
         else:
-             with st.spinner("Extracting audio with yt-dlp… this may take a moment."):
+             with st.spinner("Extracting audio with RapidAPI… this may take a moment."):
                 try:
+                    if "RAPIDAPI_KEY" not in st.secrets:
+                        st.error("🚨 **RapidAPI Key Missing** \n\nStreamlit Cloud's IP address is blocked by Instagram. To use the Link feature, you must configure a free RapidAPI key.\n\n**How to fix this in 60 seconds:**\n1. Go to [RapidAPI - Instagram Scraper API by Social API](https://rapidapi.com/social-api/api/instagram-scraper-api2/pricing) and subscribe to the **Basic (Free)** tier (500 requests/month).\n2. Go to the [Endpoints tab](https://rapidapi.com/social-api/api/instagram-scraper-api2) and copy your `X-RapidAPI-Key` from the code snippet on the right.\n3. Go to your Streamlit Cloud Dashboard, click **⋮ Settings** -> **Secrets**.\n4. Paste: `RAPIDAPI_KEY = \"your_key_here\"` and click Save.\n\n*Alternatively, use the **Upload File** tab right now!*")
+                        st.stop()
+                    
+                    # ── Step 1: get video JSON from RapidAPI ──────────────────
+                    import requests
+                    api_url = "https://instagram-scraper-api2.p.rapidapi.com/v1/post_info"
+                    querystring = {"code_or_id_or_url": url.strip()}
+                    headers = {
+                        "x-rapidapi-key": st.secrets["RAPIDAPI_KEY"],
+                        "x-rapidapi-host": "instagram-scraper-api2.p.rapidapi.com"
+                    }
+                    
+                    response = requests.get(api_url, headers=headers, params=querystring)
+                    
+                    if response.status_code != 200:
+                        st.error(f"🚨 **API Error {response.status_code}**\n\nPlease check your RapidAPI key or the URL.")
+                        with st.expander("Show detailed API log"):
+                            st.code(response.text)
+                        st.stop()
+                        
+                    data = response.json()
+                    
+                    # Extract the first video URL
+                    video_url = None
+                    try:
+                        # Depending on the exact schema, it usually sits here for a reel:
+                        items = data.get("data", {}).get("items", [])
+                        if not items and "data" in data and "video_versions" in data["data"]:
+                            video_url = data["data"]["video_versions"][0]["url"]
+                        elif items:
+                            item = items[0]
+                            if "video_versions" in item:
+                                video_url = item["video_versions"][0]["url"]
+                            elif "carousel_media" in item:
+                                # For carousel with a video
+                                for c_media in item["carousel_media"]:
+                                    if "video_versions" in c_media:
+                                        video_url = c_media["video_versions"][0]["url"]
+                                        break
+                    except Exception as e:
+                        st.error(f"Failed to parse Instagram data. Please use the Upload File tab. Details: {e}")
+                        st.stop()
+                        
+                    if not video_url:
+                        st.error("No video found in this Instagram link. Make sure it's a valid Reel or Video post.")
+                        st.stop()
+                        
                     with tempfile.TemporaryDirectory() as tmpdir:
-                        output_template = os.path.join(tmpdir, "audio")
-
-                        # ── Step 1: download audio with yt-dlp ──────────────────
+                        # ── Step 2: download the raw video file ──────────────────
+                        temp_video_path = os.path.join(tmpdir, "downloaded_video.mp4")
+                        with requests.get(video_url, stream=True) as r:
+                            r.raise_for_status()
+                            with open(temp_video_path, 'wb') as f:
+                                for chunk in r.iter_content(chunk_size=8192):
+                                    f.write(chunk)
+                                    
+                        # ── Step 3: extract audio using ffmpeg ──────────────────
+                        output_audio_path = os.path.join(tmpdir, "extracted_audio.mp3")
                         proc = subprocess.run(
                             [
-                                "yt-dlp",
-                                "--extract-audio",
-                                "--audio-format", "mp3",
-                                "--audio-quality", "0",
-                                "-o", f"{output_template}.%(ext)s",
-                                url.strip(),
+                                "ffmpeg",
+                                "-y",
+                                "-i", temp_video_path,
+                                "-vn",
+                                "-acodec", "libmp3lame",
+                                "-q:a", "2",
+                                output_audio_path
                             ],
                             capture_output=True,
                             text=True,
                         )
-
+                        
                         if proc.returncode != 0:
-                            st.error(
-                                "🚨 **Instagram blocked the download.** \n\n"
-                                "Since this app is running in the cloud, Instagram often blocks requests asking for a login. "
-                                "Please use the **Upload File** tab instead."
-                            )
+                            st.error("Failed to extract audio from the downloaded Instagram video.")
                             with st.expander("Show detailed error log"):
                                 st.code(proc.stderr.strip())
                             st.stop()
 
-                        # ── Step 2: locate the downloaded file ──────────────────
-                        files = glob.glob(os.path.join(tmpdir, "audio.*"))
-                        if not files:
-                            st.error("No audio file was created. Check the URL and try again.")
-                            st.stop()
+                        # ── Step 4: identify with ShazamAPI ─────────────────────
+                        identify_music_from_file_path(output_audio_path)
 
-                        audio_path = files[0]
-
-                        # ── Step 3: identify with ShazamAPI ─────────────────────
-                        identify_music_from_file_path(audio_path)
-
-                except FileNotFoundError:
-                    st.error(
-                        "`yt-dlp` was not found on your system. "
-                        "Install it with `pip install yt-dlp` or `brew install yt-dlp`."
-                    )
                 except Exception as exc:
                     st.error(f"An unexpected error occurred: {exc}")
 
