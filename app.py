@@ -92,17 +92,8 @@ with tab1:
                     video_url = None
                     try:
                         # For instagram-scraper-20251 /postdetail/ endpoint:
-                        items = data.get("data", {}).get("items", [])
-                        if items:
-                            item = items[0]
-                            if "video_versions" in item and len(item["video_versions"]) > 0:
-                                video_url = item["video_versions"][0]["url"]
-                            elif "carousel_media" in item:
-                                # For carousel with a video
-                                for c_media in item["carousel_media"]:
-                                    if "video_versions" in c_media and len(c_media["video_versions"]) > 0:
-                                        video_url = c_media["video_versions"][0]["url"]
-                                        break
+                        if "data" in data and "video_url" in data["data"]:
+                            video_url = data["data"]["video_url"]
                     except Exception as e:
                         st.error(f"Failed to parse Instagram data. Please use the Upload File tab. Details: {e}")
                         with st.expander("Show JSON Schema"):
