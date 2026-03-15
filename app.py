@@ -1,5 +1,4 @@
 import streamlit as st
-import asyncio
 import tempfile
 import os
 import subprocess
@@ -57,18 +56,25 @@ if st.button("Find Music", type="primary", use_container_width=True):
 
                     audio_path = files[0]
 
-                    # ── Step 3: identify with Shazam ────────────────────────
-                    from shazamio import Shazam  # imported here so Streamlit loads fast
+                    # ── Step 3: identify with ShazamAPI ─────────────────────
+                    from ShazamAPI import Shazam
 
-                    async def identify(path: str) -> dict:
-                        shazam = Shazam()
-                        return await shazam.recognize(path)
+                    with open(audio_path, "rb") as f:
+                        mp3_data = f.read()
 
-                    result = asyncio.run(identify(audio_path))
+                    shazam = Shazam(mp3_data)
+                    recognize_generator = shazam.recognizeSong()
+
+                    track = None
+                    try:
+                        _offset, result = next(recognize_generator)
+                        if result and "track" in result:
+                            track = result["track"]
+                    except StopIteration:
+                        pass
 
                     # ── Step 4: display results ─────────────────────────────
-                    if result and "track" in result:
-                        track = result["track"]
+                    if track:
                         song   = track.get("title",    "Unknown Song")
                         artist = track.get("subtitle", "Unknown Artist")
 
