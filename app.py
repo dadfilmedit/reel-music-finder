@@ -70,11 +70,11 @@ with tab1:
                     
                     # ── Step 1: get video JSON from RapidAPI ──────────────────
                     import requests
-                    api_url = "https://instagram-scraper-api2.p.rapidapi.com/v1/post_info"
-                    querystring = {"code_or_id_or_url": url.strip()}
+                    api_url = "https://instagram-scraper-20251.p.rapidapi.com/postdetail/"
+                    querystring = {"code_or_url": url.strip()}
                     headers = {
                         "x-rapidapi-key": st.secrets["RAPIDAPI_KEY"],
-                        "x-rapidapi-host": "instagram-scraper-api2.p.rapidapi.com"
+                        "x-rapidapi-host": "instagram-scraper-20251.p.rapidapi.com"
                     }
                     
                     response = requests.get(api_url, headers=headers, params=querystring)
@@ -90,22 +90,22 @@ with tab1:
                     # Extract the first video URL
                     video_url = None
                     try:
-                        # Depending on the exact schema, it usually sits here for a reel:
+                        # For instagram-scraper-20251 /postdetail/ endpoint:
                         items = data.get("data", {}).get("items", [])
-                        if not items and "data" in data and "video_versions" in data["data"]:
-                            video_url = data["data"]["video_versions"][0]["url"]
-                        elif items:
+                        if items:
                             item = items[0]
-                            if "video_versions" in item:
+                            if "video_versions" in item and len(item["video_versions"]) > 0:
                                 video_url = item["video_versions"][0]["url"]
                             elif "carousel_media" in item:
                                 # For carousel with a video
                                 for c_media in item["carousel_media"]:
-                                    if "video_versions" in c_media:
+                                    if "video_versions" in c_media and len(c_media["video_versions"]) > 0:
                                         video_url = c_media["video_versions"][0]["url"]
                                         break
                     except Exception as e:
                         st.error(f"Failed to parse Instagram data. Please use the Upload File tab. Details: {e}")
+                        with st.expander("Show JSON Schema"):
+                            st.json(data)
                         st.stop()
                         
                     if not video_url:
