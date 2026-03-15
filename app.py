@@ -71,7 +71,8 @@ with tab1:
                     # ── Step 1: get video JSON from RapidAPI ──────────────────
                     import requests
                     api_url = "https://instagram-scraper-20251.p.rapidapi.com/postdetail/"
-                    querystring = {"code_or_url": url.strip()}
+                    clean_url = url.strip().split("?")[0]
+                    querystring = {"code_or_url": clean_url}
                     headers = {
                         "x-rapidapi-key": st.secrets["RAPIDAPI_KEY"],
                         "x-rapidapi-host": "instagram-scraper-20251.p.rapidapi.com"
